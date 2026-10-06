@@ -4,3 +4,10 @@ node_modules
 .vscode-test/
 *.vsix
 .DS_Store
+.vscode/**
+node_modules/**
+.git/**
+.gitignore
+*.vsix
+tsconfig.json
+eslint.config.mjs
