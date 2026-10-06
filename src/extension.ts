@@ -1,130 +1,222 @@
 import * as vscode from 'vscode';
-import { spawn } from 'child_process';
+import { runCode } from './runner';
 
 let outputChannel: vscode.OutputChannel;
 
-export function activate(context: vscode.ExtensionContext) {
 
-    vscode.window.showInformationMessage(
-        'UV Python Runner command started'
+function executeCode(
+    code: string,
+    cwd: string
+): void {
+
+    const result = runCode(cwd);
+
+    const backend = result.backend;
+    const child = result.child;
+
+    outputChannel.clear();
+    outputChannel.show(true);
+
+    outputChannel.appendLine(
+        'Python Workbench'
     );
 
-    outputChannel = vscode.window.createOutputChannel(
-        'UV Python Runner'
+    outputChannel.appendLine(
+        `Backend: ${backend}`
     );
 
-    const runSelection = vscode.commands.registerCommand(
-        'uv-python-runner.runSelection',
-        () => {
+    outputChannel.appendLine(
+        '----------------------------------------'
+    );
 
-            const editor = vscode.window.activeTextEditor;
+    child.stdout.on(
+        'data',
+        (data) => {
+            outputChannel.append(
+                data.toString()
+            );
+        }
+    );
 
-            if (!editor) {
-                vscode.window.showErrorMessage(
-                    'No active editor.'
-                );
-                return;
-            }
+    child.stderr.on(
+        'data',
+        (data) => {
+            outputChannel.append(
+                data.toString()
+            );
+        }
+    );
 
-            const selection = editor.selection;
+    child.on(
+        'error',
+        (error) => {
 
-            if (selection.isEmpty) {
-                vscode.window.showWarningMessage(
-                    'Select some Python code first.'
-                );
-                return;
-            }
-
-            const code = editor.document.getText(selection);
-
-            const workspaceFolder =
-                vscode.workspace.getWorkspaceFolder(
-                    editor.document.uri
-                );
-
-            const cwd =
-                workspaceFolder?.uri.fsPath ??
-                process.cwd();
-
-            outputChannel.clear();
-            outputChannel.show(true);
+            outputChannel.appendLine('');
 
             outputChannel.appendLine(
-                `Running with uv in: ${cwd}`
+                `Failed to start ${backend}: ${error.message}`
             );
+
+            vscode.window.showErrorMessage(
+                `Python Workbench could not start the ${backend} backend.`
+            );
+        }
+    );
+
+    child.on(
+        'close',
+        (exitCode) => {
+
+            outputChannel.appendLine('');
 
             outputChannel.appendLine(
                 '----------------------------------------'
             );
 
-            outputChannel.show(true);
-
             outputChannel.appendLine(
-                `Selected code:\n${code}`
+                `Process exited with code ${exitCode}`
             );
-
-            outputChannel.appendLine(
-                `Working directory: ${cwd}`
-            );
-
-            outputChannel.appendLine(
-                'Starting: uv run python -'
-            );
-
-            const child = spawn(
-                'uv',
-                ['run', 'python', '-'],
-                {
-                    cwd,
-                    shell: false
-                }
-            );
-
-            child.stdout.on('data', (data) => {
-                outputChannel.append(
-                    data.toString()
-                );
-            });
-
-            child.stderr.on('data', (data) => {
-                outputChannel.append(
-                    data.toString()
-                );
-            });
-
-            child.on('error', (error) => {
-
-                outputChannel.appendLine('');
-                outputChannel.appendLine(
-                    `Failed to start uv: ${error.message}`
-                );
-
-                vscode.window.showErrorMessage(
-                    'Could not run uv. Make sure uv is installed and available in PATH.'
-                );
-            });
-
-            child.on('close', (code) => {
-
-                outputChannel.appendLine('');
-                outputChannel.appendLine(
-                    '----------------------------------------'
-                );
-
-                outputChannel.appendLine(
-                    `Process exited with code ${code}`
-                );
-            });
-
-            child.stdin.write(code);
-            child.stdin.end();
         }
     );
 
+    child.stdin.write(code);
+    child.stdin.end();
+}
+
+
+export function activate(
+    context: vscode.ExtensionContext
+): void {
+
+    outputChannel =
+        vscode.window.createOutputChannel(
+            'Python Workbench'
+        );
+
+
+    const runSelection =
+        vscode.commands.registerCommand(
+            'python-workbench.runSelection',
+            () => {
+
+                const editor =
+                    vscode.window.activeTextEditor;
+
+                if (!editor) {
+
+                    vscode.window.showErrorMessage(
+                        'No active editor.'
+                    );
+
+                    return;
+                }
+
+                const selection =
+                    editor.selection;
+
+                if (selection.isEmpty) {
+
+                    vscode.window.showWarningMessage(
+                        'Select some Python code first.'
+                    );
+
+                    return;
+                }
+
+                const code =
+                    editor.document.getText(
+                        selection
+                    );
+
+                const workspaceFolder =
+                    vscode.workspace.getWorkspaceFolder(
+                        editor.document.uri
+                    );
+
+                const cwd =
+                    workspaceFolder?.uri.fsPath
+                    ?? process.cwd();
+
+                executeCode(
+                    code,
+                    cwd
+                );
+            }
+        );
+
+
+    const openScratch =
+        vscode.commands.registerCommand(
+            'python-workbench.openScratch',
+            async () => {
+
+                const document =
+                    await vscode.workspace.openTextDocument({
+                        language: 'python',
+                        content: ''
+                    });
+
+                await vscode.window.showTextDocument(
+                    document
+                );
+            }
+        );
+
+
+    const runScratch =
+        vscode.commands.registerCommand(
+            'python-workbench.runScratch',
+            () => {
+
+                const editor =
+                    vscode.window.activeTextEditor;
+
+                if (!editor) {
+
+                    vscode.window.showErrorMessage(
+                        'No active editor.'
+                    );
+
+                    return;
+                }
+
+                const code =
+                    editor.document.getText();
+
+                if (!code.trim()) {
+
+                    vscode.window.showWarningMessage(
+                        'Scratch editor is empty.'
+                    );
+
+                    return;
+                }
+
+                const workspaceFolder =
+                    vscode.workspace.getWorkspaceFolder(
+                        editor.document.uri
+                    )
+                    ?? vscode.workspace.workspaceFolders?.[0];
+
+                const cwd =
+                    workspaceFolder?.uri.fsPath
+                    ?? process.cwd();
+
+                executeCode(
+                    code,
+                    cwd
+                );
+            }
+        );
+
+
     context.subscriptions.push(
         runSelection,
+        openScratch,
+        runScratch,
         outputChannel
     );
 }
 
-export function deactivate() {}
+
+export function deactivate(): void {}
