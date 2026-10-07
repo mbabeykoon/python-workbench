@@ -1,222 +1,182 @@
-import * as vscode from 'vscode';
-import { runCode } from './runner';
+import * as vscode from "vscode";
+
+import { runCode } from "./runner";
+
+import { getInterpreter } from "./interpreter";
 
 let outputChannel: vscode.OutputChannel;
 
+async function executeCode(
+  code: string,
+  cwd: string,
+  resource?: vscode.Uri,
+): Promise<void> {
+  let interpreter;
 
-function executeCode(
-    code: string,
-    cwd: string
-): void {
+  try {
+    interpreter = await getInterpreter(resource);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
 
-    const result = runCode(cwd);
-
-    const backend = result.backend;
-    const child = result.child;
-
-    outputChannel.clear();
-    outputChannel.show(true);
-
-    outputChannel.appendLine(
-        'Python Workbench'
+    vscode.window.showErrorMessage(
+      `Python Workbench could not resolve a Python interpreter: ${message}`,
     );
 
-    outputChannel.appendLine(
-        `Backend: ${backend}`
+    return;
+  }
+
+  const result = runCode({
+    cwd,
+    interpreter,
+  });
+
+  const child = result.child;
+
+  outputChannel.clear();
+
+  outputChannel.show(true);
+
+  outputChannel.appendLine("Python Workbench");
+
+  outputChannel.appendLine(
+    `Interpreter: ${interpreter.label ?? interpreter.command}`,
+  );
+
+  outputChannel.appendLine("----------------------------------------");
+
+  child.stdout.on("data", (data) => {
+    outputChannel.append(data.toString());
+  });
+
+  child.stderr.on("data", (data) => {
+    outputChannel.append(data.toString());
+  });
+
+  child.on("error", (error) => {
+    outputChannel.appendLine("");
+
+    outputChannel.appendLine(`Failed to start Python: ${error.message}`);
+
+    vscode.window.showErrorMessage(
+      "Python Workbench could not start the selected Python interpreter.",
     );
+  });
 
-    outputChannel.appendLine(
-        '----------------------------------------'
-    );
+  child.on("close", (exitCode) => {
+    outputChannel.appendLine("");
 
-    child.stdout.on(
-        'data',
-        (data) => {
-            outputChannel.append(
-                data.toString()
-            );
-        }
-    );
+    outputChannel.appendLine("----------------------------------------");
 
-    child.stderr.on(
-        'data',
-        (data) => {
-            outputChannel.append(
-                data.toString()
-            );
-        }
-    );
+    outputChannel.appendLine(`Process exited with code ${exitCode}`);
+  });
 
-    child.on(
-        'error',
-        (error) => {
+  child.stdin.write(code);
 
-            outputChannel.appendLine('');
-
-            outputChannel.appendLine(
-                `Failed to start ${backend}: ${error.message}`
-            );
-
-            vscode.window.showErrorMessage(
-                `Python Workbench could not start the ${backend} backend.`
-            );
-        }
-    );
-
-    child.on(
-        'close',
-        (exitCode) => {
-
-            outputChannel.appendLine('');
-
-            outputChannel.appendLine(
-                '----------------------------------------'
-            );
-
-            outputChannel.appendLine(
-                `Process exited with code ${exitCode}`
-            );
-        }
-    );
-
-    child.stdin.write(code);
-    child.stdin.end();
+  child.stdin.end();
 }
 
+export function activate(context: vscode.ExtensionContext): void {
+  outputChannel = vscode.window.createOutputChannel("Python Workbench");
 
-export function activate(
-    context: vscode.ExtensionContext
-): void {
+  const runSelection = vscode.commands.registerCommand(
+    "python-workbench.runSelection",
 
-    outputChannel =
-        vscode.window.createOutputChannel(
-            'Python Workbench'
+    async () => {
+      const editor = vscode.window.activeTextEditor;
+
+      if (!editor) {
+        vscode.window.showErrorMessage("No active editor.");
+
+        return;
+      }
+
+      const selection = editor.selection;
+
+      if (selection.isEmpty) {
+        vscode.window.showWarningMessage("Select some Python code first.");
+
+        return;
+      }
+
+      const code = editor.document.getText(selection);
+
+      const workspaceFolder = vscode.workspace.getWorkspaceFolder(
+        editor.document.uri,
+      );
+
+      const cwd = workspaceFolder?.uri.fsPath ?? process.cwd();
+
+      await executeCode(code, cwd, editor.document.uri);
+    },
+  );
+
+  const openScratch = vscode.commands.registerCommand(
+    "python-workbench.openScratch",
+
+    async () => {
+      const document = await vscode.workspace.openTextDocument({
+        language: "python",
+        content: "",
+      });
+
+      await vscode.window.showTextDocument(document);
+    },
+  );
+
+  const runScratch = vscode.commands.registerCommand(
+    "python-workbench.runScratch",
+
+    async () => {
+      const editor = vscode.window.activeTextEditor;
+
+      if (!editor) {
+        vscode.window.showErrorMessage("No active editor.");
+
+        return;
+      }
+
+      if (
+        editor.document.uri.scheme !== "untitled" ||
+        editor.document.languageId !== "python"
+      ) {
+        vscode.window.showWarningMessage(
+          "Run Scratch is only available for an untitled Python document.",
         );
 
+        return;
+      }
 
-    const runSelection =
-        vscode.commands.registerCommand(
-            'python-workbench.runSelection',
-            () => {
+      const code = editor.document.getText();
 
-                const editor =
-                    vscode.window.activeTextEditor;
+      if (!code.trim()) {
+        vscode.window.showWarningMessage("Scratch editor is empty.");
 
-                if (!editor) {
+        return;
+      }
 
-                    vscode.window.showErrorMessage(
-                        'No active editor.'
-                    );
+      const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
 
-                    return;
-                }
+      const cwd = workspaceFolder?.uri.fsPath ?? process.cwd();
 
-                const selection =
-                    editor.selection;
+      /*
+       * For an untitled scratch buffer, use the
+       * workspace folder URI as the resource context.
+       *
+       * This allows the Python extension to return
+       * the interpreter selected for that workspace.
+       */
+      const resource = workspaceFolder?.uri;
 
-                if (selection.isEmpty) {
+      await executeCode(code, cwd, resource);
+    },
+  );
 
-                    vscode.window.showWarningMessage(
-                        'Select some Python code first.'
-                    );
-
-                    return;
-                }
-
-                const code =
-                    editor.document.getText(
-                        selection
-                    );
-
-                const workspaceFolder =
-                    vscode.workspace.getWorkspaceFolder(
-                        editor.document.uri
-                    );
-
-                const cwd =
-                    workspaceFolder?.uri.fsPath
-                    ?? process.cwd();
-
-                executeCode(
-                    code,
-                    cwd
-                );
-            }
-        );
-
-
-    const openScratch =
-        vscode.commands.registerCommand(
-            'python-workbench.openScratch',
-            async () => {
-
-                const document =
-                    await vscode.workspace.openTextDocument({
-                        language: 'python',
-                        content: ''
-                    });
-
-                await vscode.window.showTextDocument(
-                    document
-                );
-            }
-        );
-
-
-    const runScratch =
-        vscode.commands.registerCommand(
-            'python-workbench.runScratch',
-            () => {
-
-                const editor =
-                    vscode.window.activeTextEditor;
-
-                if (!editor) {
-
-                    vscode.window.showErrorMessage(
-                        'No active editor.'
-                    );
-
-                    return;
-                }
-
-                const code =
-                    editor.document.getText();
-
-                if (!code.trim()) {
-
-                    vscode.window.showWarningMessage(
-                        'Scratch editor is empty.'
-                    );
-
-                    return;
-                }
-
-                const workspaceFolder =
-                    vscode.workspace.getWorkspaceFolder(
-                        editor.document.uri
-                    )
-                    ?? vscode.workspace.workspaceFolders?.[0];
-
-                const cwd =
-                    workspaceFolder?.uri.fsPath
-                    ?? process.cwd();
-
-                executeCode(
-                    code,
-                    cwd
-                );
-            }
-        );
-
-
-    context.subscriptions.push(
-        runSelection,
-        openScratch,
-        runScratch,
-        outputChannel
-    );
+  context.subscriptions.push(
+    runSelection,
+    openScratch,
+    runScratch,
+    outputChannel,
+  );
 }
-
 
 export function deactivate(): void {}

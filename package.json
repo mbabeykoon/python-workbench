@@ -7,44 +7,51 @@
   "engines": {
     "vscode": "^1.100.0"
   },
+  "extensionKind": [
+    "workspace"
+  ],
+  "extensionDependencies": [
+    "ms-python.python",
+    "ms-toolsai.jupyter"
+  ],
   "categories": [
+    "Programming Languages",
     "Other"
   ],
   "activationEvents": [],
   "main": "./out/extension.js",
-
-"contributes": {
-  "commands": [
-    {
-      "command": "python-workbench.runSelection",
-      "title": "Python Workbench: Run Selection"
-    },
-    {
-    "command": "python-workbench.openScratch",
-    "title": "Python Workbench: Open Scratch"
-    },
-    {
-    "command": "python-workbench.runScratch",
-    "title": "Python Workbench: Run Scratch"
-    }
-  ],
-  "menus": {
-    "editor/context": [
+  "contributes": {
+    "commands": [
       {
-        "command": "uv-python-runner.runSelection",
-        "when": "editorLangId == python && editorHasSelection",
-        "group": "navigation"
+        "command": "python-workbench.runSelection",
+        "title": "Python Workbench: Run Selection"
+      },
+      {
+        "command": "python-workbench.openScratch",
+        "title": "Python Workbench: Open Scratch"
+      },
+      {
+        "command": "python-workbench.runScratch",
+        "title": "Python Workbench: Run Scratch"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "python-workbench.runSelection",
+          "when": "editorLangId == python && editorHasSelection",
+          "group": "navigation"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "python-workbench.runSelection",
+        "key": "ctrl+alt+enter",
+        "when": "editorLangId == python && editorHasSelection"
       }
     ]
   },
-  "keybindings": [
-    {
-      "command": "uv-python-runner.runSelection",
-      "key": "ctrl+alt+enter",
-      "when": "editorLangId == python && editorHasSelection"
-    }
-  ]
-},
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
@@ -54,29 +61,26 @@
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/vscode": "^1.100.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "24.x",
-    "typescript-eslint": "^8.61.1",
+    "@types/vscode": "^1.100.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.0.0",
     "eslint": "^10.5.0",
     "typescript": "^6.0.3",
-    "@vscode/test-cli": "^0.0.15",
-    "@vscode/test-electron": "^3.0.0"
+    "typescript-eslint": "^8.61.1"
+  },
+  "dependencies": {
+    "@vscode/jupyter-extension": "^1.1.1",
+    "@vscode/python-extension": "^1.0.6"
   },
   "overrides": {
     "diff": "^8.0.4",
     "serialize-javascript": "^7.0.6"
-  }
-
-  ,
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/mbabeykoon/python-workbench.git"
   },
-  "license": "MIT",
-  "categories": [
-    "Programming Languages",
-    "Other"
-  ]
+  "license": "MIT"
 }
-
